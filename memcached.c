@@ -5411,6 +5411,10 @@ static void drive_machine(conn *c) {
 
         switch(c->state) {
         case conn_listening:
+            c->read_start = 0;
+            c->n_timers = 0;
+            c->timer_acc = 0;
+
             addrlen = sizeof(addr);
 #ifdef HAVE_ACCEPT4
             if (use_accept4) {
@@ -5478,6 +5482,8 @@ static void drive_machine(conn *c) {
             break;
 
         case conn_read:
+            c->read_start = rdtsc();
+
             res = IS_UDP(c->transport) ? try_read_udp(c) : try_read_network(c);
 
             switch (res) {
@@ -5664,6 +5670,7 @@ static void drive_machine(conn *c) {
             break;
 
         case conn_write:
+
             /*
              * We want to write out a simple response. If we haven't already,
              * assemble it into a msgbuf list (this will be a single-entry
@@ -5706,6 +5713,21 @@ static void drive_machine(conn *c) {
           }
             switch (transmit(c)) {
             case TRANSMIT_COMPLETE:
+                assert(c->read_start > 0);
+                unsigned long long end = rdtsc();
+                unsigned long long elapsed = end - c->read_start;
+                c->timer_acc += elapsed;
+                c->n_timers++;
+
+                if (c->n_timers == 100) {
+                    unsigned long long nanos = c->timer_acc * 1000 / CPU_FREQ;
+                    unsigned long long seconds = nanos / 1000000000llu;
+                    nanos %= 1000000000llu;
+                    fprintf(stderr, "DONE 0 Duration { secs: %llu, nanos: %llu }\n", seconds, nanos);
+                    c->n_timers = 0;
+                    c->timer_acc = 0;
+                }
+
                 if (c->state == conn_mwrite) {
                     conn_release_items(c);
                     /* XXX:  I don't know why this wasn't the general case */

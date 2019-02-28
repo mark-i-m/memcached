@@ -72,6 +72,8 @@
 #define HASHPOWER_DEFAULT 16
 #define HASHPOWER_MAX 32
 
+#define CPU_FREQ 3300
+
 /*
  * We only reposition items in the LRU queue if they haven't been repositioned
  * in this many seconds. That saves us from churning on frequently-accessed
@@ -676,7 +678,18 @@ struct conn {
     int keylen;
     conn   *next;     /* Used for generating a list of conn structures */
     LIBEVENT_THREAD *thread; /* Pointer to the thread object serving this connection */
+
+    unsigned long long timer_acc;
+    unsigned long long read_start;
+    int n_timers;
 };
+
+static __inline__ unsigned long long rdtsc(void)
+{
+    unsigned hi, lo;
+    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+}
 
 /* array of conn structures, indexed by file descriptor */
 extern conn **conns;
